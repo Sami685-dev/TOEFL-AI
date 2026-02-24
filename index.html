@@ -316,6 +316,16 @@
                     </div>
                 </div>
 
+                <!-- NEW AI STUDY PLAN SECTION -->
+                <div class="px-8 pb-4">
+                    <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 text-center shadow-sm transition-all" id="studyPlanWrapper">
+                        <button id="btnStudyPlan" onclick="generateStudyPlan()" class="ai-gradient text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg hover:-translate-y-0.5 transition transform inline-flex items-center gap-2">
+                            ✨ Generate AI Study Plan
+                        </button>
+                        <div id="studyPlanContainer" class="hidden text-left bg-white p-5 rounded-xl border border-indigo-50 shadow-inner"></div>
+                    </div>
+                </div>
+
                 <div class="p-8 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-center gap-4">
                     <button onclick="location.reload()" class="bg-white border border-slate-300 text-slate-700 px-8 py-3 rounded-xl font-bold hover:bg-slate-50 transition shadow-sm">Retake Test</button>
                     <button onclick="showAnswerKey()" class="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg">View Answer Keys & Explanations</button>
@@ -417,7 +427,7 @@
 <script>
 /* ================= CONFIGURATION ================= */
 const ACCESS_TOKEN = "593771"; 
-const apiKey = ""; // Disertakan kosong sesuai aturan, runtime akan menyediakannya.
+const apiKey = "AIzaSyB823cmKOcxOKWYdCYr7XXCLyswiGNpnkE"; // Disertakan kosong sesuai aturan, runtime akan menyediakannya.
 
 /* ================= GEMINI API INTEGRATION ================= */
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -1307,7 +1317,17 @@ function renderKeySection(sec) {
         if (sec === 3 && qItem.p) {
              const prevQ = questions[index-1];
              if (!prevQ || prevQ.p !== qItem.p) {
-                 passageHeader = `<div class="bg-slate-100 p-2 rounded text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 mt-4">Passage ${qItem.p}</div>`;
+                 const passage = ACTIVE_DATA.PASSAGES['p' + qItem.p] || ACTIVE_DATA.PASSAGES.p1;
+                 const safePassageText = encodeURIComponent(passage.text);
+                 passageHeader = `
+                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 mt-6">
+                     <div class="flex justify-between items-center mb-2">
+                         <span class="text-xs font-bold text-slate-500 uppercase tracking-wide bg-white px-2 py-1 rounded border">Passage ${qItem.p}</span>
+                         <button onclick="extractVocab(this, '${safePassageText}')" class="text-[10px] uppercase tracking-wider font-bold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 px-3 py-1.5 rounded-lg transition flex items-center gap-1">✨ Extract Key Vocab</button>
+                     </div>
+                     <div class="text-sm text-slate-600 mb-2 italic">"${passage.text.substring(0, 120)}..."</div>
+                     <div class="vocab-container hidden mt-3 p-4 bg-white border border-indigo-100 rounded-lg text-sm text-indigo-900 shadow-inner"></div>
+                 </div>`;
              }
         }
 
@@ -1537,6 +1557,61 @@ async function askAIForExplanation(btnElement, questionText, optionsJsonStr, cor
         `;
     } catch (e) {
         document.getElementById(targetDivId).innerHTML = `<p class="text-sm text-red-500 font-bold">Failed to load AI explanation. Please try again.</p>`;
+    }
+}
+
+/* ================= NEW AI FEATURES ================= */
+async function generateStudyPlan() {
+    const btn = document.getElementById('btnStudyPlan');
+    const container = document.getElementById('studyPlanContainer');
+    btn.classList.add('hidden');
+    container.classList.remove('hidden');
+    container.innerHTML = '<div class="flex items-center gap-3 text-indigo-600 font-semibold"><div class="loader"></div> Analyzing your performance...</div>';
+
+    const s1 = document.getElementById('scoreSec1').textContent;
+    const s2 = document.getElementById('scoreSec2').textContent;
+    const s3 = document.getElementById('scoreSec3').textContent;
+    const final = document.getElementById('finalScore').textContent;
+
+    const promptText = `Act as an expert TOEFL tutor. A student just took a practice test and got these converted scores:\nListening: ${s1}/68\nStructure: ${s2}/68\nReading: ${s3}/67\nEstimated Total Score: ${final}\n\nProvide a highly encouraging, personalized study plan in Indonesian. Give exactly 3 bullet points focusing on how to improve their weakest section based on the scores provided. Keep it concise, friendly, and actionable. Use HTML tags like <ul>, <li class="mb-2">, <strong> for formatting (do not use markdown formatting).`;
+
+    const payload = { contents: [{ parts: [{ text: promptText }] }] };
+
+    try {
+        const aiResponse = await callGeminiAPI(payload, false);
+        container.innerHTML = `
+            <h3 class="font-bold text-indigo-900 mb-3 flex items-center gap-2 text-lg">✨ Personalized Study Plan</h3>
+            <div class="text-sm text-slate-700 leading-relaxed">${aiResponse}</div>
+        `;
+    } catch (e) {
+        container.innerHTML = `<p class="text-sm text-red-500 font-bold">Failed to generate study plan. Please try again.</p>`;
+        btn.classList.remove('hidden');
+    }
+}
+
+async function extractVocab(btnElement, encodedText) {
+    const container = btnElement.parentElement.parentElement.querySelector('.vocab-container');
+    container.classList.remove('hidden');
+    container.innerHTML = '<div class="flex items-center gap-3 text-indigo-600 font-semibold text-xs"><div class="loader"></div> Scanning passage for advanced vocabulary...</div>';
+    btnElement.disabled = true;
+    btnElement.classList.add('opacity-50', 'cursor-not-allowed');
+
+    const text = decodeURIComponent(encodedText);
+    const promptText = `Act as an English language expert. Extract 5 advanced/difficult vocabulary words from the following passage. For each word, provide its Indonesian meaning and a short English example sentence using the word in context.\n\nFormat the response exactly as a neat HTML list (e.g., <ul class="list-disc pl-5"><li class="mb-2"><strong class="text-indigo-700">Word</strong>: Meaning <br><em class="text-slate-500">"Example sentence."</em></li></ul>). Do NOT use markdown code blocks.\n\nPassage:\n"${text}"`;
+
+    const payload = { contents: [{ parts: [{ text: promptText }] }] };
+
+    try {
+        const aiResponse = await callGeminiAPI(payload, false);
+        container.innerHTML = `
+            <div class="font-bold text-indigo-900 mb-3 flex items-center gap-2">✨ Key Vocabulary Extracted</div>
+            ${aiResponse}
+        `;
+        btnElement.classList.add('hidden'); // Hide button after success
+    } catch (e) {
+        container.innerHTML = `<p class="text-sm text-red-500 font-bold">Failed to extract vocabulary. Please try again.</p>`;
+        btnElement.disabled = false;
+        btnElement.classList.remove('opacity-50', 'cursor-not-allowed');
     }
 }
 </script>
